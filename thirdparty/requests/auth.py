@@ -62,11 +62,7 @@ def _basic_auth_str(username, password):
     if isinstance(password, str):
         password = password.encode('latin1')
 
-    authstr = 'Basic ' + to_native_string(
-        b64encode(b':'.join((username, password))).strip()
-    )
-
-    return authstr
+    return f"Basic {to_native_string(b64encode(b':'.join((username, password))).strip())}"
 
 
 class AuthBase(object):
@@ -136,12 +132,9 @@ class HTTPDigestAuth(AuthBase):
         opaque = self._thread_local.chal.get('opaque')
         hash_utf8 = None
 
-        if algorithm is None:
-            _algorithm = 'MD5'
-        else:
-            _algorithm = algorithm.upper()
+        _algorithm = 'MD5' if algorithm is None else algorithm.upper()
         # lambdas assume digest modules are imported at the top level
-        if _algorithm == 'MD5' or _algorithm == 'MD5-SESS':
+        if _algorithm in ['MD5', 'MD5-SESS']:
             def md5_utf8(x):
                 if isinstance(x, str):
                     x = x.encode('utf-8')
@@ -166,7 +159,7 @@ class HTTPDigestAuth(AuthBase):
                 return hashlib.sha512(x).hexdigest()
             hash_utf8 = sha512_utf8
 
-        KD = lambda s, d: hash_utf8("%s:%s" % (s, d))
+        KD = lambda s, d: hash_utf8(f"{s}:{d}")
 
         if hash_utf8 is None:
             return None
@@ -177,10 +170,10 @@ class HTTPDigestAuth(AuthBase):
         #: path is request-uri defined in RFC 2616 which should not be empty
         path = p_parsed.path or "/"
         if p_parsed.query:
-            path += '?' + p_parsed.query
+            path += f'?{p_parsed.query}'
 
-        A1 = '%s:%s:%s' % (self.username, realm, self.password)
-        A2 = '%s:%s' % (method, path)
+        A1 = f'{self.username}:{realm}:{self.password}'
+        A2 = f'{method}:{path}'
 
         HA1 = hash_utf8(A1)
         HA2 = hash_utf8(A2)
@@ -197,14 +190,12 @@ class HTTPDigestAuth(AuthBase):
 
         cnonce = (hashlib.sha1(s).hexdigest()[:16])
         if _algorithm == 'MD5-SESS':
-            HA1 = hash_utf8('%s:%s:%s' % (HA1, nonce, cnonce))
+            HA1 = hash_utf8(f'{HA1}:{nonce}:{cnonce}')
 
         if not qop:
-            respdig = KD(HA1, "%s:%s" % (nonce, HA2))
+            respdig = KD(HA1, f"{nonce}:{HA2}")
         elif qop == 'auth' or 'auth' in qop.split(','):
-            noncebit = "%s:%s:%s:%s:%s" % (
-                nonce, ncvalue, cnonce, 'auth', HA2
-            )
+            noncebit = f"{nonce}:{ncvalue}:{cnonce}:auth:{HA2}"
             respdig = KD(HA1, noncebit)
         else:
             # XXX handle auth-int.
@@ -214,17 +205,17 @@ class HTTPDigestAuth(AuthBase):
 
         # XXX should the partial digests be encoded too?
         base = 'username="%s", realm="%s", nonce="%s", uri="%s", ' \
-               'response="%s"' % (self.username, realm, nonce, path, respdig)
+                   'response="%s"' % (self.username, realm, nonce, path, respdig)
         if opaque:
-            base += ', opaque="%s"' % opaque
+            base += f', opaque="{opaque}"'
         if algorithm:
-            base += ', algorithm="%s"' % algorithm
+            base += f', algorithm="{algorithm}"'
         if entdig:
-            base += ', digest="%s"' % entdig
+            base += f', digest="{entdig}"'
         if qop:
-            base += ', qop="auth", nc=%s, cnonce="%s"' % (ncvalue, cnonce)
+            base += f', qop="auth", nc={ncvalue}, cnonce="{cnonce}"'
 
-        return 'Digest %s' % (base)
+        return f'Digest {base}'
 
     def handle_redirect(self, r, **kwargs):
         """Reset num_401_calls counter on redirects."""

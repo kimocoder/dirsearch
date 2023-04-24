@@ -57,8 +57,7 @@ class File(object):
         return self.content()
 
     def get_lines(self):
-        for line in FileUtils.get_lines(self.path):
-            yield line
+        yield from FileUtils.get_lines(self.path)
 
     def __cmp__(self, other):
         if not isinstance(other, File):
@@ -80,10 +79,7 @@ class File(object):
 class FileUtils(object):
     @staticmethod
     def build_path(*path_components):
-        if path_components:
-            path = os.path.join(*path_components)
-        else:
-            path = ""
+        path = os.path.join(*path_components) if path_components else ""
         return path
 
     @staticmethod
@@ -136,9 +132,6 @@ class FileUtils(object):
 
     @staticmethod
     def write_lines(file_name, lines):
-        if type(lines) is list:
-            content = "\n".join(lines)
-        else:
-            content = lines
+        content = "\n".join(lines) if type(lines) is list else lines
         with open(file_name, "w") as f:
             f.writelines(content)

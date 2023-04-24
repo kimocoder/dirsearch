@@ -62,21 +62,15 @@ class RequestEncodingMixin(object):
     def path_url(self):
         """Build the path URL to use."""
 
-        url = []
-
         p = urlsplit(self.url)
 
         path = p.path
         if not path:
             path = '/'
 
-        url.append(path)
-
-        query = p.query
-        if query:
-            url.append('?')
-            url.append(query)
-
+        url = [path]
+        if query := p.query:
+            url.extend(('?', query))
         return ''.join(url)
 
     @staticmethod
@@ -88,23 +82,25 @@ class RequestEncodingMixin(object):
         if parameters are supplied as a dict.
         """
 
-        if isinstance(data, (str, bytes)):
+        if (
+            isinstance(data, (str, bytes))
+            or hasattr(data, 'read')
+            or not hasattr(data, '__iter__')
+        ):
             return data
-        elif hasattr(data, 'read'):
-            return data
-        elif hasattr(data, '__iter__'):
-            result = []
-            for k, vs in to_key_val_list(data):
-                if isinstance(vs, basestring) or not hasattr(vs, '__iter__'):
-                    vs = [vs]
-                for v in vs:
-                    if v is not None:
-                        result.append(
-                            (k.encode('utf-8') if isinstance(k, str) else k,
-                             v.encode('utf-8') if isinstance(v, str) else v))
-            return urlencode(result, doseq=True)
-        else:
-            return data
+        result = []
+        for k, vs in to_key_val_list(data):
+            if isinstance(vs, basestring) or not hasattr(vs, '__iter__'):
+                vs = [vs]
+            result.extend(
+                (
+                    k.encode('utf-8') if isinstance(k, str) else k,
+                    v.encode('utf-8') if isinstance(v, str) else v,
+                )
+                for v in vs
+                if v is not None
+            )
+        return urlencode(result, doseq=True)
 
     @staticmethod
     def _encode_files(files, data):
@@ -153,15 +149,16 @@ class RequestEncodingMixin(object):
                 fn = guess_filename(v) or k
                 fp = v
 
-            if isinstance(fp, (str, bytes, bytearray)):
+            if (
+                isinstance(fp, (str, bytes, bytearray))
+                or not hasattr(fp, 'read')
+                and fp is not None
+            ):
                 fdata = fp
             elif hasattr(fp, 'read'):
                 fdata = fp.read()
-            elif fp is None:
-                continue
             else:
-                fdata = fp
-
+                continue
             rf = RequestField(name=k, data=fdata, filename=fn, headers=fh)
             rf.make_multipart(content_type=ft)
             new_fields.append(rf)
@@ -176,7 +173,7 @@ class RequestHooksMixin(object):
         """Properly register a hook."""
 
         if event not in self.hooks:
-            raise ValueError('Unsupported event specified, with event name "%s"' % (event))
+            raise ValueError(f'Unsupported event specified, with event name "{event}"')
 
         if isinstance(hook, Callable):
             self.hooks[event].append(hook)
@@ -249,7 +246,7 @@ class Request(RequestHooksMixin):
         self.cookies = cookies
 
     def __repr__(self):
-        return '<Request [%s]>' % (self.method)
+        return f'<Request [{self.method}]>'
 
     def prepare(self):
         """Constructs a :class:`PreparedRequest <PreparedRequest>` for transmission and returns it."""
@@ -326,7 +323,7 @@ class PreparedRequest(RequestEncodingMixin, RequestHooksMixin):
         self.prepare_hooks(hooks)
 
     def __repr__(self):
-        return '<PreparedRequest [%s]>' % (self.method)
+        return f'<PreparedRequest [{self.method}]>'
 
     def copy(self):
         p = PreparedRequest()
@@ -410,7 +407,7 @@ class PreparedRequest(RequestEncodingMixin, RequestHooksMixin):
             netloc += '@'
         netloc += host
         if port:
-            netloc += ':' + str(port)
+            netloc += f':{str(port)}'
 
         # Bare domains aren't valid URLs.
         if not path:
@@ -431,13 +428,8 @@ class PreparedRequest(RequestEncodingMixin, RequestHooksMixin):
         if isinstance(params, (str, bytes)):
             params = to_native_string(params)
 
-        enc_params = self._encode_params(params)
-        if enc_params:
-            if query:
-                query = '%s&%s' % (query, enc_params)
-            else:
-                query = enc_params
-
+        if enc_params := self._encode_params(params):
+            query = f'{query}&{enc_params}' if query else enc_params
         url = requote_uri(urlunparse([scheme, netloc, path, None, query, fragment]))
         self.url = url
 
@@ -505,14 +497,13 @@ class PreparedRequest(RequestEncodingMixin, RequestHooksMixin):
             # Multi-part file uploads.
             if files:
                 (body, content_type) = self._encode_files(files, data)
-            else:
-                if data:
-                    body = self._encode_params(data)
-                    if isinstance(data, basestring) or hasattr(data, 'read'):
-                        content_type = None
-                    else:
-                        content_type = 'application/x-www-form-urlencoded'
-
+            elif data:
+                body = self._encode_params(data)
+                content_type = (
+                    None
+                    if isinstance(data, basestring) or hasattr(data, 'read')
+                    else 'application/x-www-form-urlencoded'
+                )
             self.prepare_content_length(body)
 
             # Add content-type if it wasn't explicitly provided.
@@ -524,8 +515,7 @@ class PreparedRequest(RequestEncodingMixin, RequestHooksMixin):
     def prepare_content_length(self, body):
         """Prepare Content-Length header based on request method and body"""
         if body is not None:
-            length = super_len(body)
-            if length:
+            if length := super_len(body):
                 # If length exists, set it. Otherwise, we fallback
                 # to Transfer-Encoding: chunked.
                 self.headers['Content-Length'] = builtin_str(length)
@@ -666,7 +656,7 @@ class Response(object):
         setattr(self, 'raw', None)
 
     def __repr__(self):
-        return '<Response [%s]>' % (self.status_code)
+        return f'<Response [{self.status_code}]>'
 
     def __bool__(self):
         """Returns True if :attr:`status_code` is less than 400.
@@ -750,8 +740,7 @@ class Response(object):
             # Special case for urllib3.
             if hasattr(self.raw, 'stream'):
                 try:
-                    for chunk in self.raw.stream(chunk_size, decode_content=True):
-                        yield chunk
+                    yield from self.raw.stream(chunk_size, decode_content=True)
                 except ProtocolError as e:
                     raise ChunkedEncodingError(e)
                 except DecodeError as e:
@@ -776,7 +765,9 @@ class Response(object):
         if self._content_consumed and isinstance(self._content, bool):
             raise StreamConsumedError()
         elif chunk_size is not None and not isinstance(chunk_size, int):
-            raise TypeError("chunk_size must be an int, it is instead a %s." % type(chunk_size))
+            raise TypeError(
+                f"chunk_size must be an int, it is instead a {type(chunk_size)}."
+            )
         # simulate reading small chunks of the content
         reused_chunks = iter_slices(self._content, chunk_size)
 
@@ -804,19 +795,13 @@ class Response(object):
             if pending is not None:
                 chunk = pending + chunk
 
-            if delimiter:
-                lines = chunk.split(delimiter)
-            else:
-                lines = chunk.splitlines()
-
+            lines = chunk.split(delimiter) if delimiter else chunk.splitlines()
             if lines and lines[-1] and chunk and lines[-1][-1] == chunk[-1]:
                 pending = lines.pop()
             else:
                 pending = None
 
-            for line in lines:
-                yield line
-
+            yield from lines
         if pending is not None:
             yield pending
 
@@ -825,16 +810,16 @@ class Response(object):
         """Content of the response, in bytes."""
 
         if self._content is False:
-            # Read the contents.
             if self._content_consumed:
                 raise RuntimeError(
                     'The content for this response was already consumed')
 
-            if self.status_code == 0 or self.raw is None:
-                self._content = None
             else:
-                self._content = b''.join(self.iter_content(CONTENT_CHUNK_SIZE)) or b''
-
+                self._content = (
+                    None
+                    if self.status_code == 0 or self.raw is None
+                    else b''.join(self.iter_content(CONTENT_CHUNK_SIZE)) or b''
+                )
         self._content_consumed = True
         # don't need to release the connection; that's been handled by urllib3
         # since we exhausted the data.
@@ -858,7 +843,7 @@ class Response(object):
         encoding = self.encoding
 
         if not self.content:
-            return str('')
+            return ''
 
         # Fallback to auto-detected encoding.
         if self.encoding is None:
@@ -939,10 +924,14 @@ class Response(object):
             reason = self.reason
 
         if 400 <= self.status_code < 500:
-            http_error_msg = u'%s Client Error: %s for url: %s' % (self.status_code, reason, self.url)
+            http_error_msg = (
+                f'{self.status_code} Client Error: {reason} for url: {self.url}'
+            )
 
         elif 500 <= self.status_code < 600:
-            http_error_msg = u'%s Server Error: %s for url: %s' % (self.status_code, reason, self.url)
+            http_error_msg = (
+                f'{self.status_code} Server Error: {reason} for url: {self.url}'
+            )
 
         if http_error_msg:
             raise HTTPError(http_error_msg, response=self)

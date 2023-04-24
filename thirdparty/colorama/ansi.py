@@ -14,7 +14,7 @@ def code_to_chars(code):
 
 
 def set_title(title):
-    return OSC + "2;" + title + BEL
+    return f"{OSC}2;{title}{BEL}"
 
 
 def clear_screen(mode=2):

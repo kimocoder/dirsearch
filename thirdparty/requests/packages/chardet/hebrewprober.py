@@ -235,15 +235,13 @@ class HebrewProber(CharSetProber):
                         # case (2) [-2:not space][-1:Non-Final letter][
                         #  cur:space]
                         self._mFinalCharVisualScore += 1
-            else:
-                # Not standing on a space
-                if (
+            elif (
                     (self._mBeforePrev == " ")
                     and (self.is_final(self._mPrev))
                     and (cur != " ")
                 ):
-                    # case (3) [-2:space][-1:final letter][cur:not space]
-                    self._mFinalCharVisualScore += 1
+                # case (3) [-2:space][-1:final letter][cur:not space]
+                self._mFinalCharVisualScore += 1
             self._mBeforePrev = self._mPrev
             self._mPrev = cur
 
@@ -271,12 +269,7 @@ class HebrewProber(CharSetProber):
 
         # Still no good, back to final letter distance, maybe it'll save the
         # day.
-        if finalsub < 0.0:
-            return VISUAL_HEBREW_NAME
-
-        # (finalsub > 0 - Logical) or (don't know what to do) default to
-        # Logical.
-        return LOGICAL_HEBREW_NAME
+        return VISUAL_HEBREW_NAME if finalsub < 0.0 else LOGICAL_HEBREW_NAME
 
     def get_state(self):
         # Remain active as long as any of the model probers are active.

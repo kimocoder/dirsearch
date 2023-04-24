@@ -16,14 +16,9 @@ def to_native_string(string, encoding='ascii'):
     necessary. This assumes ASCII unless told otherwise.
     """
     if isinstance(string, builtin_str):
-        out = string
+        return string
     else:
-        if is_py2:
-            out = string.encode(encoding)
-        else:
-            out = string.decode(encoding)
-
-    return out
+        return string.encode(encoding) if is_py2 else string.decode(encoding)
 
 
 def unicode_is_ascii(u_string):

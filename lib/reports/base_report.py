@@ -22,7 +22,7 @@ import queue
 
 class BaseReport(object):
 
-    def addPath(selg, path, status, response):
+    def addPath(self, path, status, response):
         raise NotImplementedError
 
     def save(self):
@@ -77,11 +77,7 @@ class FileBaseReport(BaseReport):
 
             self.output = output
 
-        if self.batch:
-            self.file = open(self.output, 'a+')
-
-        else:
-            self.file = open(self.output, 'w+')
+        self.file = open(self.output, 'a+') if self.batch else open(self.output, 'w+')
 
     def save(self):
         if self.batch:

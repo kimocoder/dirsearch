@@ -83,7 +83,7 @@ class PrintOutput(object):
         finally:
             contentLength = FileUtils.size_human(size)
 
-        showPath = "/" + self.basePath + path
+        showPath = f"/{self.basePath}{path}"
 
         parsed = urllib.parse.urlparse(self.target)
         showPath = "{0}://{1}{2}".format(parsed.scheme, parsed.netloc, showPath)
@@ -142,7 +142,7 @@ class PrintOutput(object):
 
     def setTarget(self, target):
         if not target.startswith("http://") and not target.startswith("https://") and "://" not in target:
-            target = "http://" + target
+            target = f"http://{target}"
 
         self.target = target
 

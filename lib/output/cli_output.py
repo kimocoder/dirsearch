@@ -98,7 +98,7 @@ class CLIOutput(object):
         finally:
             contentLength = FileUtils.size_human(size)
 
-        showPath = "/" + self.basePath + path
+        showPath = f"/{self.basePath}{path}"
 
         if full_url:
             parsed = urllib.parse.urlparse(self.target)
@@ -188,7 +188,7 @@ class CLIOutput(object):
         method,
     ):
 
-        separator = Fore.MAGENTA + " | " + Fore.YELLOW
+        separator = f"{Fore.MAGENTA} | {Fore.YELLOW}"
 
         config = Style.BRIGHT + Fore.YELLOW
         config += "Extensions: {0}".format(Fore.CYAN + extensions + Fore.YELLOW)
@@ -217,7 +217,7 @@ class CLIOutput(object):
         if not target.endswith("/"):
             target += "/"
         if not target.startswith(("http://", "https://")) and "://" not in target:
-            target = "http://" + target
+            target = f"http://{target}"
 
         self.target = target
 

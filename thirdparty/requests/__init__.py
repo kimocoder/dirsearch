@@ -81,16 +81,17 @@ def _check_cryptography(cryptography_version):
         return
 
     if cryptography_version < [1, 3, 4]:
-        warning = 'Old version of cryptography ({}) may cause slowdown.'.format(cryptography_version)
+        warning = f'Old version of cryptography ({cryptography_version}) may cause slowdown.'
         warnings.warn(warning, RequestsDependencyWarning)
 
 # Check imported dependencies for compatibility.
 try:
     check_compatibility(urllib3.__version__, chardet.__version__)
 except (AssertionError, ValueError):
-    warnings.warn("urllib3 ({}) or chardet ({}) doesn't match a supported "
-                  "version!".format(urllib3.__version__, chardet.__version__),
-                  RequestsDependencyWarning)
+    warnings.warn(
+        f"urllib3 ({urllib3.__version__}) or chardet ({chardet.__version__}) doesn't match a supported version!",
+        RequestsDependencyWarning,
+    )
 
 # Attempt to enable urllib3's fallback for SNI support
 # if the standard library doesn't support SNI or the

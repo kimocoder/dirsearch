@@ -64,11 +64,11 @@ class ABCMeta(type):
     def __new__(mcls, name, bases, namespace):
         cls = super(ABCMeta, mcls).__new__(mcls, name, bases, namespace)
         # Compute set of abstract method names
-        abstracts = set(
+        abstracts = {
             name
             for name, value in list(namespace.items())
             if getattr(value, "__isabstractmethod__", False)
-        )
+        }
         for base in bases:
             for name in getattr(base, "__abstractmethods__", set()):
                 value = getattr(cls, name, None)
@@ -82,34 +82,34 @@ class ABCMeta(type):
         cls._abc_negative_cache_version = ABCMeta._abc_invalidation_counter
         return cls
 
-    def register(cls, subclass):
+    def register(self, subclass):
         """Register a virtual subclass of an ABC."""
         if not isinstance(subclass, type):
             raise TypeError("Can only register classes")
-        if issubclass(subclass, cls):
+        if issubclass(subclass, self):
             return  # Already a subclass
         # Subtle: scanner for cycles *after* testing for "already a subclass";
         # this means we allow X.register(X) and interpret it as a no-op.
-        if issubclass(cls, subclass):
+        if issubclass(self, subclass):
             # This would create a cycle, which is bad for the algorithm below
             raise RuntimeError("Refusing to create an inheritance cycle")
-        cls._abc_registry.add(subclass)
+        self._abc_registry.add(subclass)
         ABCMeta._abc_invalidation_counter += 1  # Invalidate negative cache
 
-    def _dump_registry(cls, file=None):
+    def _dump_registry(self, file=None):
         """Debug helper to print the ABC registry."""
-        print("Class: %s.%s" % (cls.__module__, cls.__name__), file=file)
-        print("Inv.counter: %s" % ABCMeta._abc_invalidation_counter, file=file)
-        for name in sorted(cls.__dict__.keys()):
+        print(f"Class: {self.__module__}.{self.__name__}", file=file)
+        print(f"Inv.counter: {ABCMeta._abc_invalidation_counter}", file=file)
+        for name in sorted(self.__dict__.keys()):
             if name.startswith("_abc_"):
-                value = getattr(cls, name)
+                value = getattr(self, name)
                 print("%s: %r" % (name, value), file=file)
 
-    def __instancecheck__(cls, instance):
+    def __instancecheck__(self, instance):
         """Override for isinstance(instance, cls)."""
         # Inline the cache checking when it's simple.
         subclass = getattr(instance, "__class__", None)
-        if subclass in cls._abc_cache:
+        if subclass in self._abc_cache:
             return True
         subtype = type(instance)
         # Old-style instances
@@ -117,51 +117,52 @@ class ABCMeta(type):
             subtype = subclass
         if subtype is subclass or subclass is None:
             if (
-                cls._abc_negative_cache_version == ABCMeta._abc_invalidation_counter
-                and subtype in cls._abc_negative_cache
+                self._abc_negative_cache_version
+                == ABCMeta._abc_invalidation_counter
+                and subtype in self._abc_negative_cache
             ):
                 return False
             # Fall back to the subclass check.
-            return cls.__subclasscheck__(subtype)
-        return cls.__subclasscheck__(subclass) or cls.__subclasscheck__(subtype)
+            return self.__subclasscheck__(subtype)
+        return self.__subclasscheck__(subclass) or self.__subclasscheck__(subtype)
 
-    def __subclasscheck__(cls, subclass):
+    def __subclasscheck__(self, subclass):
         """Override for issubclass(subclass, cls)."""
         # Check cache
-        if subclass in cls._abc_cache:
+        if subclass in self._abc_cache:
             return True
         # Check negative cache; may have to invalidate
-        if cls._abc_negative_cache_version < ABCMeta._abc_invalidation_counter:
+        if self._abc_negative_cache_version < ABCMeta._abc_invalidation_counter:
             # Invalidate the negative cache
-            cls._abc_negative_cache = set()
-            cls._abc_negative_cache_version = ABCMeta._abc_invalidation_counter
-        elif subclass in cls._abc_negative_cache:
+            self._abc_negative_cache = set()
+            self._abc_negative_cache_version = ABCMeta._abc_invalidation_counter
+        elif subclass in self._abc_negative_cache:
             return False
         # Check the subclass hook
-        ok = cls.__subclasshook__(subclass)
+        ok = self.__subclasshook__(subclass)
         if ok is not NotImplemented:
             assert isinstance(ok, bool)
             if ok:
-                cls._abc_cache.add(subclass)
+                self._abc_cache.add(subclass)
             else:
-                cls._abc_negative_cache.add(subclass)
+                self._abc_negative_cache.add(subclass)
             return ok
         # Check if it's a direct subclass
-        if cls in getattr(subclass, "__mro__", ()):
-            cls._abc_cache.add(subclass)
+        if self in getattr(subclass, "__mro__", ()):
+            self._abc_cache.add(subclass)
             return True
         # Check if it's a subclass of a registered class (recursive)
-        for rcls in cls._abc_registry:
+        for rcls in self._abc_registry:
             if issubclass(subclass, rcls):
-                cls._abc_cache.add(subclass)
+                self._abc_cache.add(subclass)
                 return True
         # Check if it's a subclass of a subclass (recursive)
-        for scls in cls.__subclasses__():
+        for scls in self.__subclasses__():
             if issubclass(subclass, scls):
-                cls._abc_cache.add(subclass)
+                self._abc_cache.add(subclass)
                 return True
         # No dice; update negative cache
-        cls._abc_negative_cache.add(subclass)
+        self._abc_negative_cache.add(subclass)
         return False
 
 
@@ -180,10 +181,7 @@ class Sized(metaclass=ABCMeta):
 
     @classmethod
     def __subclasshook__(cls, C):
-        if cls is Sized:
-            if _hasattr(C, "__len__"):
-                return True
-        return NotImplemented
+        return True if cls is Sized and _hasattr(C, "__len__") else NotImplemented
 
 
 class Container(metaclass=ABCMeta):
@@ -193,9 +191,8 @@ class Container(metaclass=ABCMeta):
 
     @classmethod
     def __subclasshook__(cls, C):
-        if cls is Container:
-            if _hasattr(C, "__contains__"):
-                return True
+        if cls is Container and _hasattr(C, "__contains__"):
+            return True
         return NotImplemented
 
 
@@ -207,10 +204,7 @@ class Iterable(metaclass=ABCMeta):
 
     @classmethod
     def __subclasshook__(cls, C):
-        if cls is Iterable:
-            if _hasattr(C, "__iter__"):
-                return True
-        return NotImplemented
+        return True if cls is Iterable and _hasattr(C, "__iter__") else NotImplemented
 
 
 Iterable.register(str)
@@ -230,32 +224,27 @@ class Set(Sized, Iterable, Container):
     def __le__(self, other):
         if not isinstance(other, Set):
             return NotImplemented
-        if len(self) > len(other):
-            return False
-        for elem in self:
-            if elem not in other:
-                return False
-        return True
+        return False if len(self) > len(other) else all(elem in other for elem in self)
 
     def __lt__(self, other):
-        if not isinstance(other, Set):
-            return NotImplemented
-        return len(self) < len(other) and self.__le__(other)
+        return (
+            len(self) < len(other) and self.__le__(other)
+            if isinstance(other, Set)
+            else NotImplemented
+        )
 
     def __gt__(self, other):
-        if not isinstance(other, Set):
-            return NotImplemented
-        return other < self
+        return other < self if isinstance(other, Set) else NotImplemented
 
     def __ge__(self, other):
-        if not isinstance(other, Set):
-            return NotImplemented
-        return other <= self
+        return other <= self if isinstance(other, Set) else NotImplemented
 
     def __eq__(self, other):
-        if not isinstance(other, Set):
-            return NotImplemented
-        return len(self) == len(other) and self.__le__(other)
+        return (
+            len(self) == len(other) and self.__le__(other)
+            if isinstance(other, Set)
+            else NotImplemented
+        )
 
     def __ne__(self, other):
         return not (self == other)
@@ -270,15 +259,14 @@ class Set(Sized, Iterable, Container):
         return cls(it)
 
     def __and__(self, other):
-        if not isinstance(other, Iterable):
-            return NotImplemented
-        return self._from_iterable(value for value in other if value in self)
+        return (
+            self._from_iterable(value for value in other if value in self)
+            if isinstance(other, Iterable)
+            else NotImplemented
+        )
 
     def isdisjoint(self, other):
-        for value in other:
-            if value in self:
-                return False
-        return True
+        return all(value not in self for value in other)
 
     def __or__(self, other):
         if not isinstance(other, Iterable):
@@ -454,9 +442,11 @@ class OrderedSet(MutableSet):
         return key
 
     def __repr__(self):
-        if not self:
-            return "%s()" % (self.__class__.__name__,)
-        return "%s(%r)" % (self.__class__.__name__, list(self))
+        return (
+            "%s(%r)" % (self.__class__.__name__, list(self))
+            if self
+            else f"{self.__class__.__name__}()"
+        )
 
     def __eq__(self, other):
         if isinstance(other, OrderedSet):

@@ -29,11 +29,7 @@ class ScannerException(Exception):
 
 class Scanner(object):
     def __init__(self, requester, testPath=None, suffix=None, preffix=None):
-        if not testPath:
-            self.testPath = RandomUtils.randString()
-        else:
-            self.testPath = testPath
-
+        self.testPath = testPath if testPath else RandomUtils.randString()
         self.suffix = suffix if suffix else ""
         self.preffix = preffix if preffix else ""
         self.requester = requester
@@ -93,8 +89,7 @@ class Scanner(object):
             mark = firstLocation[i:i + n]
             marks.append(mark)
 
-        regexp = "^.*{0}.*$".format(".*".join(map(re.escape, marks)))
-        return regexp
+        return "^.*{0}.*$".format(".*".join(map(re.escape, marks)))
 
     def scan(self, path, response):
         if self.invalidStatus == response.status == 404:

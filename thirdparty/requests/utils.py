@@ -74,9 +74,8 @@ if sys.platform == 'win32':
         proxyOverride = proxyOverride.split(';')
         # now check if we match one of the registry values.
         for test in proxyOverride:
-            if test == '<local>':
-                if '.' not in host:
-                    return True
+            if test == '<local>' and '.' not in host:
+                return True
             test = test.replace(".", r"\.")     # mask dots
             test = test.replace("*", r".*")     # change glob sequence
             test = test.replace("?", r".")      # change glob char
@@ -169,14 +168,14 @@ def super_len(o):
 def get_netrc_auth(url, raise_errors=False):
     """Returns the Requests tuple auth for a given url from netrc."""
 
-    try:
+    with contextlib.suppress(ImportError, AttributeError):
         from netrc import netrc, NetrcParseError
 
         netrc_path = None
 
         for f in NETRC_FILES:
             try:
-                loc = os.path.expanduser('~/{}'.format(f))
+                loc = os.path.expanduser(f'~/{f}')
             except KeyError:
                 # os.path.expanduser can fail when $HOME is undefined and
                 # getpwuid fails. See https://bugs.python.org/issue20164 &
@@ -201,8 +200,7 @@ def get_netrc_auth(url, raise_errors=False):
         host = ri.netloc.split(splitstr)[0]
 
         try:
-            _netrc = netrc(netrc_path).authenticators(host)
-            if _netrc:
+            if _netrc := netrc(netrc_path).authenticators(host):
                 # Return with login / password
                 login_i = (0 if _netrc[0] else 1)
                 return (_netrc[login_i], _netrc[2])
@@ -211,10 +209,6 @@ def get_netrc_auth(url, raise_errors=False):
             # we'll just skip netrc auth unless explicitly asked to raise errors.
             if raise_errors:
                 raise
-
-    # App Engine hackiness.
-    except (ImportError, AttributeError):
-        pass
 
 
 def guess_filename(obj):
@@ -413,12 +407,7 @@ def dict_from_cookiejar(cj):
     :rtype: dict
     """
 
-    cookie_dict = {}
-
-    for cookie in cj:
-        cookie_dict[cookie.name] = cookie.value
-
-    return cookie_dict
+    return {cookie.name: cookie.value for cookie in cj}
 
 
 def add_dict_to_cookiejar(cj, cookie_dict):
@@ -466,8 +455,7 @@ def _parse_content_type_header(header):
     items_to_strip = "\"' "
 
     for param in params:
-        param = param.strip()
-        if param:
+        if param := param.strip():
             key, value = param, True
             index_of_equals = param.find("=")
             if index_of_equals != -1:
@@ -502,17 +490,14 @@ def stream_decode_response_unicode(iterator, r):
     """Stream decodes a iterator."""
 
     if r.encoding is None:
-        for item in iterator:
-            yield item
+        yield from iterator
         return
 
     decoder = codecs.getincrementaldecoder(r.encoding)(errors='replace')
     for chunk in iterator:
-        rv = decoder.decode(chunk)
-        if rv:
+        if rv := decoder.decode(chunk):
             yield rv
-    rv = decoder.decode(b'', final=True)
-    if rv:
+    if rv := decoder.decode(b'', final=True):
         yield rv
 
 
@@ -544,12 +529,12 @@ def get_unicode_from_response(r):
         ' warning should only appear once.)'),
         DeprecationWarning)
 
-    tried_encodings = []
-
     # Try charset from content-type
     encoding = get_encoding_from_headers(r.headers)
 
     if encoding:
+        tried_encodings = []
+
         try:
             return str(r.content, encoding)
         except UnicodeError:
@@ -575,19 +560,16 @@ def unquote_unreserved(uri):
     """
     parts = uri.split('%')
     for i in range(1, len(parts)):
-        h = parts[i][0:2]
+        h = parts[i][:2]
         if len(h) == 2 and h.isalnum():
             try:
                 c = chr(int(h, 16))
             except ValueError:
-                raise InvalidURL("Invalid percent-escape sequence: '%s'" % h)
+                raise InvalidURL(f"Invalid percent-escape sequence: '{h}'")
 
-            if c in UNRESERVED_SET:
-                parts[i] = c + parts[i][2:]
-            else:
-                parts[i] = '%' + parts[i]
+            parts[i] = c + parts[i][2:] if c in UNRESERVED_SET else f'%{parts[i]}'
         else:
-            parts[i] = '%' + parts[i]
+            parts[i] = f'%{parts[i]}'
     return ''.join(parts)
 
 
@@ -656,20 +638,19 @@ def is_valid_cidr(string_network):
 
     :rtype: bool
     """
-    if string_network.count('/') == 1:
-        try:
-            mask = int(string_network.split('/')[1])
-        except ValueError:
-            return False
+    if string_network.count('/') != 1:
+        return False
+    try:
+        mask = int(string_network.split('/')[1])
+    except ValueError:
+        return False
 
-        if mask < 1 or mask > 32:
-            return False
+    if mask < 1 or mask > 32:
+        return False
 
-        try:
-            socket.inet_aton(string_network.split('/')[0])
-        except socket.error:
-            return False
-    else:
+    try:
+        socket.inet_aton(string_network.split('/')[0])
+    except socket.error:
         return False
     return True
 
@@ -736,7 +717,7 @@ def should_bypass_proxies(url, no_proxy):
         else:
             host_with_port = parsed.hostname
             if parsed.port:
-                host_with_port += ':{}'.format(parsed.port)
+                host_with_port += f':{parsed.port}'
 
             for host in no_proxy:
                 if parsed.hostname.endswith(host) or host_with_port.endswith(host):
@@ -751,10 +732,7 @@ def should_bypass_proxies(url, no_proxy):
         except (TypeError, socket.gaierror):
             bypass = False
 
-    if bypass:
-        return True
-
-    return False
+    return bypass
 
 
 def get_environ_proxies(url, no_proxy=None):
@@ -763,10 +741,7 @@ def get_environ_proxies(url, no_proxy=None):
 
     :rtype: dict
     """
-    if should_bypass_proxies(url, no_proxy=no_proxy):
-        return {}
-    else:
-        return getproxies()
+    return {} if should_bypass_proxies(url, no_proxy=no_proxy) else getproxies()
 
 
 def select_proxy(url, proxies):
@@ -781,18 +756,19 @@ def select_proxy(url, proxies):
         return proxies.get(urlparts.scheme, proxies.get('all'))
 
     proxy_keys = [
-        urlparts.scheme + '://' + urlparts.hostname,
+        f'{urlparts.scheme}://{urlparts.hostname}',
         urlparts.scheme,
-        'all://' + urlparts.hostname,
+        f'all://{urlparts.hostname}',
         'all',
     ]
-    proxy = None
-    for proxy_key in proxy_keys:
-        if proxy_key in proxies:
-            proxy = proxies[proxy_key]
-            break
-
-    return proxy
+    return next(
+        (
+            proxies[proxy_key]
+            for proxy_key in proxy_keys
+            if proxy_key in proxies
+        ),
+        None,
+    )
 
 
 def default_user_agent(name="python-requests"):
@@ -801,7 +777,7 @@ def default_user_agent(name="python-requests"):
 
     :rtype: str
     """
-    return '%s/%s' % (name, __version__)
+    return f'{name}/{__version__}'
 
 
 def default_headers():
@@ -881,13 +857,11 @@ def guess_json_utf(data):
             return 'utf-16-be'
         if sample[1::2] == _null2:  # 2nd and 4th are null
             return 'utf-16-le'
-        # Did not detect 2 valid UTF-16 ascii-range characters
-    if nullcount == 3:
+    elif nullcount == 3:
         if sample[:3] == _null3:
             return 'utf-32-be'
         if sample[1:] == _null3:
             return 'utf-32-le'
-        # Did not detect a valid UTF-32 ascii-range character
     return None
 
 
@@ -944,7 +918,9 @@ def check_header_validity(header):
         pat = _CLEAN_HEADER_REGEX_STR
     try:
         if not pat.match(value):
-            raise InvalidHeader("Invalid return character or leading space in header: %s" % name)
+            raise InvalidHeader(
+                f"Invalid return character or leading space in header: {name}"
+            )
     except TypeError:
         raise InvalidHeader("Value for header {%s: %s} must be of type str or "
                             "bytes, not %s" % (name, value, type(value)))

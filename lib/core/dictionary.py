@@ -122,11 +122,11 @@ class Dictionary(object):
                     noforce = False
 
                 # Skip if the path contains excluded extensions
-                if self._excludeExtensions:
-                    if any(
-                        [find("." + extension, line) for extension in self._excludeExtensions]
-                    ):
-                        continue
+                if self._excludeExtensions and any(
+                    find(f".{extension}", line)
+                    for extension in self._excludeExtensions
+                ):
+                    continue
 
                 # Classic dirsearch wordlist processing (with %EXT% keyword)
                 if "%ext%" in line.lower():
@@ -136,8 +136,6 @@ class Dictionary(object):
                         quoted = self.quote(newline)
                         result.append(quoted)
 
-                # If forced extensions is used and the path is not a directory ... (terminated by /)
-                # process line like a forced extension.
                 elif self._forcedExtensions and not line.rstrip().endswith("/") and not noforce:
                     quoted = self.quote(line)
 
@@ -146,18 +144,15 @@ class Dictionary(object):
                         if not extension.strip():
                             result.append(quoted)
                         else:
-                            result.append(quoted + "." + extension)
+                            result.append(f"{quoted}.{extension}")
 
-                    result.append(quoted)
-                    result.append(quoted + "/")
-
-                # Append line unmodified.
+                    result.extend((quoted, f"{quoted}/"))
                 else:
                     quoted = self.quote(line)
 
                     if self._onlySelected and not line.rstrip().endswith("/") and "." in line:
                         for extension in self._extensions:
-                            if line.endswith("." + extension):
+                            if line.endswith(f".{extension}"):
                                 result.append(quoted)
                                 break
 
@@ -167,18 +162,20 @@ class Dictionary(object):
         # Adding prefixes for finding config files etc
         if self._prefixes:
             for res in list(dict.fromkeys(result)):
-                for pref in self._prefixes:
-                    if not res.startswith(pref):
-                        custom.append(pref + res)
-
+                custom.extend(
+                    pref + res
+                    for pref in self._prefixes
+                    if not res.startswith(pref)
+                )
         # Adding suffixes for finding backups etc
         if self._suffixes:
             for res in list(dict.fromkeys(result)):
                 if not res.rstrip().endswith("/"):
-                    for suff in self._suffixes:
-                        if not res.rstrip().endswith(suff):
-                            custom.append(res + suff)
-
+                    custom.extend(
+                        res + suff
+                        for suff in self._suffixes
+                        if not res.rstrip().endswith(suff)
+                    )
         result = custom if custom else result
 
         if self.lowercase:

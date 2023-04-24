@@ -62,17 +62,12 @@ class Requester(object):
 
         # If no protocol specified, set http by default
         if "://" not in url:
-            parsed = urllib.parse.urlparse("http://" + url)
+            parsed = urllib.parse.urlparse(f"http://{url}")
 
-        # If protocol is not supported
         elif parsed.scheme not in ["https", "http"]:
             raise RequestException({"message": "Unsupported URL scheme: {0}".format(parsed.scheme)})
 
-        if parsed.path.startswith("/"):
-            self.basePath = parsed.path[1:]
-        else:
-            self.basePath = parsed.path
-
+        self.basePath = parsed.path[1:] if parsed.path.startswith("/") else parsed.path
         # Safe quote all special characters in basePath to prevent from being encoded when performing requests
         self.basePath = urllib.parse.quote(self.basePath, safe="!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
         self.protocol = parsed.scheme
@@ -149,11 +144,10 @@ class Requester(object):
                 if proxy:
                     proxy = {"https": proxy, "http": proxy}
 
-                else:
-                    if self.proxylist:
-                        proxy = {"https": random.choice(self.proxylist), "http": random.choice(self.proxylist)}
-                    elif self.proxy:
-                        proxy = {"https": self.proxy, "http": self.proxy}
+                elif self.proxylist:
+                    proxy = {"https": random.choice(self.proxylist), "http": random.choice(self.proxylist)}
+                elif self.proxy:
+                    proxy = {"https": self.proxy, "http": self.proxy}
 
                 url = self.url + self.basePath + path
 

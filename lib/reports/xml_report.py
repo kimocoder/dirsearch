@@ -34,13 +34,13 @@ class XMLReport(FileBaseReport):
         self.storeData((path, status, contentLength, response.redirect))
 
     def generate(self):
-        result = "<?xml version=\"1.0\"?>\n"
-
         headerName = "{0}://{1}:{2}/{3}".format(
             self.protocol, self.host, self.port, self.basePath
         )
 
-        result += "<time>{0}</time>\n".format(time.ctime())
+        result = "<?xml version=\"1.0\"?>\n" + "<time>{0}</time>\n".format(
+            time.ctime()
+        )
         result += "<target url=\"{0}\">\n".format(headerName)
 
         for path, status, contentLength, redirect in self.pathList:

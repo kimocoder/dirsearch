@@ -214,18 +214,14 @@ class HTTPAdapter(BaseAdapter):
         """
         if url.lower().startswith('https') and verify:
 
-            cert_loc = None
-
-            # Allow self-specified cert location.
-            if verify is not True:
-                cert_loc = verify
-
+            cert_loc = verify if verify is not True else None
             if not cert_loc:
                 cert_loc = extract_zipped_paths(DEFAULT_CA_BUNDLE_PATH)
 
             if not cert_loc or not os.path.exists(cert_loc):
-                raise IOError("Could not find a suitable TLS CA certificate bundle, "
-                              "invalid path: {}".format(cert_loc))
+                raise IOError(
+                    f"Could not find a suitable TLS CA certificate bundle, invalid path: {cert_loc}"
+                )
 
             conn.cert_reqs = 'CERT_REQUIRED'
 
@@ -246,11 +242,13 @@ class HTTPAdapter(BaseAdapter):
                 conn.cert_file = cert
                 conn.key_file = None
             if conn.cert_file and not os.path.exists(conn.cert_file):
-                raise IOError("Could not find the TLS certificate file, "
-                              "invalid path: {}".format(conn.cert_file))
+                raise IOError(
+                    f"Could not find the TLS certificate file, invalid path: {conn.cert_file}"
+                )
             if conn.key_file and not os.path.exists(conn.key_file):
-                raise IOError("Could not find the TLS key file, "
-                              "invalid path: {}".format(conn.key_file))
+                raise IOError(
+                    f"Could not find the TLS key file, invalid path: {conn.key_file}"
+                )
 
     def build_response(self, req, resp):
         """Builds a :class:`Response <requests.Response>` object from a urllib3
@@ -298,23 +296,19 @@ class HTTPAdapter(BaseAdapter):
         :param proxies: (optional) A Requests-style dictionary of proxies used on this request.
         :rtype: urllib3.ConnectionPool
         """
-        proxy = select_proxy(url, proxies)
-
-        if proxy:
+        if proxy := select_proxy(url, proxies):
             proxy = prepend_scheme_if_needed(proxy, 'http')
             proxy_url = parse_url(proxy)
             if not proxy_url.host:
                 raise InvalidProxyURL("Please check proxy URL. It is malformed"
                                       " and could be missing the host.")
             proxy_manager = self.proxy_manager_for(proxy)
-            conn = proxy_manager.connection_from_url(url)
+            return proxy_manager.connection_from_url(url)
         else:
             # Only scheme should be lower case
             parsed = urlparse(url)
             url = parsed.geturl()
-            conn = self.poolmanager.connection_from_url(url)
-
-        return conn
+            return self.poolmanager.connection_from_url(url)
 
     def close(self):
         """Disposes of any internal state.
@@ -417,7 +411,7 @@ class HTTPAdapter(BaseAdapter):
         url = self.request_url(request, proxies)
         self.add_headers(request, stream=stream, timeout=timeout, verify=verify, cert=cert, proxies=proxies)
 
-        chunked = not (request.body is None or 'Content-Length' in request.headers)
+        chunked = request.body is not None and 'Content-Length' not in request.headers
 
         if isinstance(timeout, tuple):
             try:
@@ -425,13 +419,9 @@ class HTTPAdapter(BaseAdapter):
                 timeout = TimeoutSauce(connect=connect, read=read)
             except ValueError as e:
                 # this may raise a string formatting error.
-                err = ("Invalid timeout {}. Pass a (connect, read) "
-                       "timeout tuple, or a single float to set "
-                       "both timeouts to the same value".format(timeout))
+                err = f"Invalid timeout {timeout}. Pass a (connect, read) timeout tuple, or a single float to set both timeouts to the same value"
                 raise ValueError(err)
-        elif isinstance(timeout, TimeoutSauce):
-            pass
-        else:
+        elif not isinstance(timeout, TimeoutSauce):
             timeout = TimeoutSauce(connect=timeout, read=timeout)
 
         try:
@@ -498,10 +488,10 @@ class HTTPAdapter(BaseAdapter):
             raise ConnectionError(err, request=request)
 
         except MaxRetryError as e:
-            if isinstance(e.reason, ConnectTimeoutError):
-                # TODO: Remove this in 3.0.0: see #2811
-                if not isinstance(e.reason, NewConnectionError):
-                    raise ConnectTimeout(e, request=request)
+            if isinstance(e.reason, ConnectTimeoutError) and not isinstance(
+                e.reason, NewConnectionError
+            ):
+                raise ConnectTimeout(e, request=request)
 
             if isinstance(e.reason, ResponseError):
                 raise RetryError(e, request=request)

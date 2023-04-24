@@ -42,9 +42,7 @@ class Fuzzer(object):
         self.testFailPath = testFailPath
         self.basePath = self.requester.basePath
         self.threads = []
-        self.threadsCount = (
-            threads if len(self.dictionary) >= threads else len(self.dictionary)
-        )
+        self.threadsCount = min(len(self.dictionary), threads)
         self.delay = delay
         self.running = False
         self.stopped = 0
@@ -74,14 +72,14 @@ class Fuzzer(object):
 
         for extension in self.dictionary.extensions:
             self.scanners[extension] = Scanner(
-                self.requester, self.testFailPath, "." + extension
+                self.requester, self.testFailPath, f".{extension}"
             )
 
     def setupThreads(self):
         if len(self.threads):
             self.threads = []
 
-        for thread in range(self.threadsCount):
+        for _ in range(self.threadsCount):
             newThread = threading.Thread(target=self.thread_proc)
             newThread.daemon = True
             self.threads.append(newThread)
@@ -93,12 +91,14 @@ class Fuzzer(object):
         if path.startswith('.'):
             return self.scanners['dotfiles']
 
-        for extension in list(self.scanners.keys()):
-            if path.endswith(extension):
-                return self.scanners[extension]
-
-        # By default, returns empty tester
-        return self.defaultScanner
+        return next(
+            (
+                self.scanners[extension]
+                for extension in list(self.scanners.keys())
+                if path.endswith(extension)
+            ),
+            self.defaultScanner,
+        )
 
     def start(self):
         # Setting up testers
